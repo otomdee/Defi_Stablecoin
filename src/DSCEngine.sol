@@ -43,6 +43,7 @@ contract DSCEngine is ReentrancyGuard {
     error DSCEngine__TokenNotAllowed(address token);
     error DSCEngine__TransferFailed();
     error DSCEngine__BreaksHealthFactor(uint256 userHealthFactor);
+    error DSCEngine__MintFailed();
 
     ///////////////////////
     /// State Variables ///
@@ -130,6 +131,11 @@ contract DSCEngine is ReentrancyGuard {
     */
     function mint(uint256 amountDsc) external moreThanZero(amountDsc) nonReentrant {
         s_amountDscMinted[msg.sender] += amountDsc;
+        _revertIfHealthFactorIsBroken(msg.sender);
+        bool minted = i_dsc.mint(msg.sender, amountDsc);
+        if (!minted) {
+            revert DSCEngine__MintFailed();
+        }
     }
 
     function burn() external {}
