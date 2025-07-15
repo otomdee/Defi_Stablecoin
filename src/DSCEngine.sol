@@ -221,8 +221,6 @@ contract DSCEngine is ReentrancyGuard {
         _revertIfHealthFactorIsBroken(msg.sender);
     }
 
-    function getHealthFactor() external view {}
-
     //////////////////////////////////////
     /// Private and Internal Functions ///
     //////////////////////////////////////
@@ -330,5 +328,10 @@ contract DSCEngine is ReentrancyGuard {
         (totalDSCminted, collateralValueInUsd) = _getAccountInformation(user);
 
         return (totalDSCminted, collateralValueInUsd);
+    }
+
+    function getHealthFactor(address user) external view returns (uint256) {
+        uint256 healthFactor = _healthFactor(user);
+        return healthFactor;
     }
 }

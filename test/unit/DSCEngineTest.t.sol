@@ -155,6 +155,36 @@ contract DSCEngineTest is Test {
         assertEq(value, expectedUsdValue);
     }
 
+    /////////////////////////
+    // healthFactor Tests ///
+    /////////////////////////
+
+    function testHealthFactorReturnsInfinityWhenNoDSCIsMinted() public depositedWethCollateral {
+        //user deposits 10 weth($30k)
+        //user does not mint any DSC
+        uint256 healthFactor;
+
+        vm.prank(USER);
+        healthFactor = dscEngine.getHealthFactor(USER);
+
+        assertEq(healthFactor, type(uint256).max);
+    }
+
+    function testHealthFactorReturnsCorrectValueWhenSomeDSCIsMinted() public depositedWethCollateral {
+        //user deposits 10 weth($30k)
+        //user mints $7.5k worth of DSC
+        //Health Factor should be 15k/7.5k -> 2
+        uint256 expectedHealthFactor = 2 ether;
+        uint256 actualHealthFactor;
+
+        vm.startPrank(USER);
+        dscEngine.mint(7500 ether);
+        actualHealthFactor = dscEngine.getHealthFactor(USER);
+        vm.stopPrank();
+
+        assertEq(expectedHealthFactor, actualHealthFactor);
+    }
+
     ////////////////////////////////////////////////////////////
     // getAccountInformationReturnsCorrectInformation Tests ///
     ///////////////////////////////////////////////////////////
