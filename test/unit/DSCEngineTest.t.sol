@@ -23,6 +23,7 @@ contract DSCEngineTest is Test {
     address USER = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
+    uint256 public constant MINT_AMOUNT = 7500 ether;
 
     address[] public tokenAddresses;
     address[] public priceFeedAddresses;
@@ -31,6 +32,15 @@ contract DSCEngineTest is Test {
         vm.startPrank(USER);
         ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
         dscEngine.depositCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+
+    modifier depositedWethCollateralAndMintedDSC() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateral(weth, AMOUNT_COLLATERAL);
+        dscEngine.mint(MINT_AMOUNT);
         vm.stopPrank();
         _;
     }
@@ -76,9 +86,9 @@ contract DSCEngineTest is Test {
         assertEq(expectedWeth, actualWeth);
     }
 
-    /////////////////////////////
+    ////////////////
     // mint Tests //
-    /////////////////////////////
+    ////////////////
 
     function testMintRevertsIfHealthFactorIsToolow() public depositedWethCollateral {
         //user deposits 10 WETH = $30k
@@ -99,9 +109,50 @@ contract DSCEngineTest is Test {
         assertEq(dsc.balanceOf(USER), 15000 ether);
     }
 
-    /////////////////////////////
-    // burn Tests //////////////
-    /////////////////////////////
+    //////////////////
+    // burn Tests ///
+    /////////////////
+
+    function testBurnReducesAmountOfUsersDSC() public depositedWethCollateralAndMintedDSC {
+        //user deposits $30k weth collateral and mints $7.5k DSC
+        //user burns $2.5k DSC
+        uint256 burnAmount = 2500 ether;
+        uint256 startingDscBalance;
+        uint256 endingDscBalance;
+
+        vm.startPrank(USER);
+        dsc.approve(address(dscEngine), burnAmount);
+        (startingDscBalance,) = dscEngine.getAccountInformation(USER);
+        dscEngine.burn(burnAmount);
+        (endingDscBalance,) = dscEngine.getAccountInformation(USER);
+        vm.stopPrank();
+
+        assertEq(startingDscBalance, endingDscBalance + burnAmount);
+    }
+
+    function testBurnRemovesTheDSCTokensFromCirculation() public depositedWethCollateralAndMintedDSC {
+        //user deposits $30k weth collateral and mints $7.5k DSC
+        //user burns $2.5k DSC
+        uint256 burnAmount = 2500 ether;
+        uint256 startingEngineDSCbalance;
+        uint256 endingEngineDSCbalance;
+        uint256 startingDscBalance;
+        uint256 endingDscBalance;
+
+        vm.startPrank(USER);
+        dsc.approve(address(dscEngine), burnAmount);
+        startingEngineDSCbalance = dsc.balanceOf(address(dscEngine));
+        (startingDscBalance,) = dscEngine.getAccountInformation(USER);
+
+        dscEngine.burn(burnAmount);
+
+        (endingDscBalance,) = dscEngine.getAccountInformation(USER);
+        endingEngineDSCbalance = dsc.balanceOf(address(dscEngine));
+        vm.stopPrank();
+
+        assertEq(startingDscBalance, endingDscBalance + burnAmount);
+        assertEq(startingEngineDSCbalance, endingEngineDSCbalance);
+    }
 
     /////////////////////////////
     // depositCollateral Tests //
@@ -173,7 +224,7 @@ contract DSCEngineTest is Test {
     function testHealthFactorReturnsCorrectValueWhenSomeDSCIsMinted() public depositedWethCollateral {
         //user deposits 10 weth($30k)
         //user mints $7.5k worth of DSC
-        //Health Factor should be 15k/7.5k -> 2
+        //Health Factor should be 15k/7.5k = 2
         uint256 expectedHealthFactor = 2 ether;
         uint256 actualHealthFactor;
 
