@@ -16,19 +16,44 @@ contract DSCEngineTest is Test {
     HelperConfig helperConfig;
     DSCEngine dscEngine;
     address weth;
+    address btc;
     address ethUsdPriceFeed;
+    address btcUsdPriceFeed;
 
     address USER = makeAddr("user");
     uint256 public constant AMOUNT_COLLATERAL = 10 ether;
     uint256 public constant STARTING_ERC20_BALANCE = 10 ether;
 
+    address[] public tokenAddresses;
+    address[] public priceFeedAddresses;
+
+    modifier depositedWethCollateral() {
+        vm.startPrank(USER);
+        ERC20Mock(weth).approve(address(dscEngine), AMOUNT_COLLATERAL);
+        dscEngine.depositCollateral(weth, AMOUNT_COLLATERAL);
+        vm.stopPrank();
+        _;
+    }
+
     function setUp() external {
         deployer = new DeployDSC();
 
         (dsc, dscEngine, helperConfig) = deployer.run();
-        (ethUsdPriceFeed,, weth,,) = helperConfig.activeNetworkConfig();
+        (ethUsdPriceFeed, btcUsdPriceFeed, weth, btc,) = helperConfig.activeNetworkConfig();
 
         ERC20Mock(weth).mint(USER, STARTING_ERC20_BALANCE);
+    }
+
+    ///////////////////////
+    // Constructor Tests //
+    ///////////////////////
+    function testRevertsIfTokenLengthDoesntMatchPriceFeeds() public {
+        tokenAddresses.push(weth);
+        priceFeedAddresses.push(ethUsdPriceFeed);
+        priceFeedAddresses.push(btcUsdPriceFeed);
+
+        vm.expectRevert(DSCEngine.DSCEngine__TokenAddressesAndPriceFeedAddressesAmountsDontMatch.selector);
+        new DSCEngine(tokenAddresses, priceFeedAddresses, address(dsc));
     }
 
     /////////////////
@@ -43,6 +68,41 @@ contract DSCEngineTest is Test {
         assertEq(expectedUsd, actualUsd);
     }
 
+    function testGetTokenAmountFromUsd() public view {
+        uint256 usdAmount = 300 ether;
+        uint256 expectedWeth = 0.1 ether;
+        uint256 actualWeth = dscEngine.getTokenAmountFromUsd(weth, usdAmount);
+
+        assertEq(expectedWeth, actualWeth);
+    }
+
+    /////////////////////////////
+    // mint Tests //
+    /////////////////////////////
+
+    function testMintRevertsIfHealthFactorIsToolow() public depositedWethCollateral {
+        //user deposits 10 WETH = $30k
+        //user tries to mint $15.1k DSC
+
+        vm.expectRevert();
+        vm.prank(USER);
+        dscEngine.mint(15100 ether);
+    }
+
+    function testUserIsAbleToMintWithAHighEnoughHealthFactor() public depositedWethCollateral {
+        //user deposits 10 WETH = $30k
+        //user tries to mint $15k DSC
+
+        vm.prank(USER);
+        dscEngine.mint(15000 ether);
+
+        assertEq(dsc.balanceOf(USER), 15000 ether);
+    }
+
+    /////////////////////////////
+    // burn Tests //////////////
+    /////////////////////////////
+
     /////////////////////////////
     // depositCollateral Tests //
     /////////////////////////////
@@ -55,5 +115,62 @@ contract DSCEngineTest is Test {
         vm.expectRevert(DSCEngine.DSCEngine__NeedsMoreThanZero.selector);
         vm.prank(USER);
         dscEngine.depositCollateral(weth, 0);
+    }
+
+    /////////////////////////////
+    // redeemCollateral Tests ///
+    /////////////////////////////
+
+    function testRedeemCollateralRevertsIfAmountExceedsUsersBalance() public depositedWethCollateral {
+        //user deposits 10 weth
+        //user tries to redeem 11 weth
+
+        vm.expectRevert();
+        vm.prank(USER);
+        dscEngine.redeemCollateral(weth, 11 ether);
+    }
+
+    function testCanRedeemCollateralIfHealthFactorIsOkay() public depositedWethCollateral {
+        //user deposits 10 weth
+        //user tries to redeem 10 weth
+        uint256 startingBalance = ERC20Mock(weth).balanceOf(USER);
+        vm.prank(USER);
+        dscEngine.redeemCollateral(weth, 10 ether);
+
+        uint256 endingBalance = ERC20Mock(weth).balanceOf(USER);
+        assertEq(endingBalance, startingBalance + 10 ether);
+    }
+
+    //////////////////////////////////////
+    // getAccountCollateralValue Tests ///
+    //////////////////////////////////////
+
+    function testGetAccountCollateralValueReturnsCorrectValue() public depositedWethCollateral {
+        //user deposits 10 weth($30k)
+        uint256 expectedUsdValue = 30000 ether;
+
+        vm.prank(USER);
+        uint256 value = dscEngine.getAccountCollateralValue(USER);
+        console.log(value);
+        assertEq(value, expectedUsdValue);
+    }
+
+    ////////////////////////////////////////////////////////////
+    // getAccountInformationReturnsCorrectInformation Tests ///
+    ///////////////////////////////////////////////////////////
+
+    function testGetAccountInformationReturnsCorrectInformation() public depositedWethCollateral {
+        //user deposits 10 weth($30k)
+        //user mints 0 DSC
+        uint256 dscMinted;
+        uint256 totalCollateralValue;
+
+        uint256 expectedDscMinted = 0;
+        uint256 expectedCollateralValue = 30000 ether;
+
+        vm.prank(USER);
+        (dscMinted, totalCollateralValue) = dscEngine.getAccountInformation(USER);
+        assertEq(dscMinted, expectedDscMinted);
+        assertEq(totalCollateralValue, expectedCollateralValue);
     }
 }
