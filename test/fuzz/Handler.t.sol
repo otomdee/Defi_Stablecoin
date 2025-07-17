@@ -17,6 +17,9 @@ contract Handler is Test {
 
     uint256 MAX_DEPOSIT_SIZE = type(uint96).max;
 
+    uint256 public timesMintIsCalled;
+    address[] usersWithCollateralDeposited;
+
     constructor(DSCEngine _engine, DecentralizedStableCoin _dsc) {
         dscEngine = _engine;
         dsc = _dsc;
@@ -27,18 +30,34 @@ contract Handler is Test {
         wbtc = ERC20Mock(collateralTokens[1]);
     }
 
-    function mintDsc(uint256 amount) public {
-        //will revert if amount is 0
-        amount = bound(amount, 1, MAX_DEPOSIT_SIZE);
-        vm.startPrank(msg.sender);
-        dscEngine.mint(amount);
-        vm.stopPrank();
-    }
+    // function mintDsc(uint256 amount, uint256 addressSeed) public {
+    //     if (usersWithCollateralDeposited.length == 0) {
+    //         return;
+    //     }
+
+    //     address sender = usersWithCollateralDeposited[addressSeed % usersWithCollateralDeposited.length];
+    //     (uint256 totalDscMinted, uint256 collateralValueInUsd) = dscEngine.getAccountInformation(sender);
+
+    //     uint256 maxDscToMint = (collateralValueInUsd / 2) - totalDscMinted;
+    //     if (maxDscToMint < 0) {
+    //         return;
+    //     }
+
+    //     amount = bound(amount, 0, maxDscToMint);
+    //     if (amount <= 0) {
+    //         return;
+    //     }
+
+    //     vm.startPrank(sender);
+    //     dscEngine.mint(amount);
+    //     vm.stopPrank();
+
+    //     timesMintIsCalled++;
+    // }
 
     function depositCollateral(uint256 _collateral, uint256 _amountCollateral) public {
         _amountCollateral = bound(_amountCollateral, 1, MAX_DEPOSIT_SIZE);
         ERC20Mock collateral = _getCollateralFromSeed(_collateral);
-        console.logAddress(address(collateral));
 
         // mint and approve!
         vm.startPrank(msg.sender);
@@ -47,11 +66,14 @@ contract Handler is Test {
 
         dscEngine.depositCollateral(address(collateral), _amountCollateral);
         vm.stopPrank();
+
+        usersWithCollateralDeposited.push(msg.sender);
     }
 
     function redeemCollateral(uint256 collateralSeed, uint256 amountCollateral) public {
         ERC20Mock collateral = _getCollateralFromSeed(collateralSeed);
 
+        //this doesnt account for tokens minted, so health factor will break if tokens are minted before making this call
         uint256 maxCollateralToRedeem = dscEngine.getCollateralBalanceOfUser(address(collateral), msg.sender);
 
         amountCollateral = bound(amountCollateral, 0, maxCollateralToRedeem);

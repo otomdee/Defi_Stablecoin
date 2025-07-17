@@ -8,6 +8,7 @@ pragma solidity ^0.8.19;
 //2. getter view functions should never revert
 
 import {Test} from "forge-std/Test.sol";
+import {console} from "forge-std/console.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {DeployDSC} from "../../script/DeployDSC.s.sol";
 import {DSCEngine} from "../../src/DSCEngine.sol";
@@ -17,6 +18,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Handler} from "./Handler.t.sol";
 
 contract InvariantTest is StdInvariant, Test {
+    uint256 constant GET_AMOUNT = 1 ether;
+
     DeployDSC deployer;
     DSCEngine dscEngine;
     DecentralizedStableCoin dsc;
@@ -46,5 +49,17 @@ contract InvariantTest is StdInvariant, Test {
         uint256 wbtcValue = dscEngine.getUsdValue(wbtc, totalWbtcDeposited);
 
         assert(wethValue + wbtcValue >= totalSupply);
+
+        console.log("times mint is called: ", handler.timesMintIsCalled());
+    }
+
+    function invariant_getterFunctionsDoNotRevert() public view {
+        dscEngine.getAccountCollateralValue(msg.sender);
+        dscEngine.getCollateralBalanceOfUser(weth, msg.sender);
+        dscEngine.getUsdValue(weth, GET_AMOUNT);
+        dscEngine.getTokenAmountFromUsd(weth, GET_AMOUNT);
+        dscEngine.getAccountInformation(msg.sender);
+        dscEngine.getHealthFactor(msg.sender);
+        dscEngine.getCollateralTokens();
     }
 }
